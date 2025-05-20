@@ -1,0 +1,42 @@
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 🧪 Ambiente virtual
+venv/
+.env
+.env.*
+
+# 📦 Dependências
+*.log
+pip-wheel-metadata/
+
+# 🚀 Uvicorn reload cache
+*.reload
+
+# 🐳 Docker
+*.db
+*.sqlite3
+*.pid
+
+# 💻 IDEs
+.vscode/
+.idea/
+*.swp
+
+# 📜 Testes
+htmlcov/
+.tox/
+coverage.*
+.cache/
+pytest_cache/
+nosetests.xml
+test-results.xml
+
+# 📂 Outros
+.DS_Store

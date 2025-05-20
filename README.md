@@ -71,6 +71,23 @@ uvicorn app.main:app --reload
 - Acesse: http://localhost:8000
 - Docs automáticas: http://localhost:8000/docs
 
+
+## 🚀 Como rodar com Docker
+
+### 1. Construindo a Imagem
+```bash
+docker build -t w1-backend .
+```
+
+### 2. Rodando o container
+```bash
+docker run -d -p 8000:8000 --env-file .env w1-backend
+```
+### 3. Acessar o servidor:
+- Acesse: http://localhost:8000
+- Docs automáticas: http://localhost:8000/docs
+
+
 ## 📁 Estrutura do projeto
 
 ```bash
@@ -82,6 +99,7 @@ W1_Hackathon_Backend/
 │   ├── services/      # Integração com LLM e outras regras
 │   └── main.py        # Código principal
 ├── requirements.txt   # Dependências
+├── .env.example       # Variáveis locais
 ├── Dockerfile         # Documento Docker
 └── README.md
 ```
