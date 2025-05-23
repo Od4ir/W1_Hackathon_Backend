@@ -5,3 +5,6 @@ requests
 google-generativeai
 load_dotenv
 uuid
+PyPDF2
+python-multipart
+

@@ -3,6 +3,8 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 import uuid
+import PyPDF2
+import io
 
 load_dotenv()
 
@@ -19,6 +21,74 @@ generation_config = {
     "max_output_tokens": 8192,
     "response_mime_type": "text/plain",
 }
+
+def extract_text_from_pdf(pdf_file):
+    """Extrai texto de um arquivo PDF."""
+    try:
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_file.read()))
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text()
+        return text
+    except Exception as e:
+        return None
+
+def structure_document_text(text):
+    """Envia o texto extraído para a LLM estruturar."""
+    try:
+        prompt = """
+        Extraia as informações deste documento e retorne APENAS um JSON válido, 
+        sem comentários ou markdown, com os seguintes campos:
+        - Nome (string)
+        - CPF (string, formato "XXX.XXX.XXX-XX")
+        - Endereço (string)
+        - Holding (string, se aplicável)
+
+        Exemplo de saída esperada:
+        {
+            "Nome": "Odair Gonçalves",
+            "CPF": "123.456.789-00",
+            "Endereço": "Rua do IME, 123",
+            "Holding": "Casa na Praia"
+        }
+
+        Documento para análise:
+        """
+        
+        chat_session = model.start_chat(history=history)
+        response = chat_session.send_message(f"{prompt}\n\nDocumento:\n{text}")
+        return response.text
+    except Exception as e:
+        return None
+
+@app.route('/processar-pdf', methods=['POST'])
+def processar_pdf():
+    """Endpoint para processar PDF e retornar texto estruturado."""
+    if 'file' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
+    
+    pdf_file = request.files['file']
+    if pdf_file.filename == '':
+        return jsonify({'erro': 'Nome de arquivo vazio'}), 400
+    
+    if not pdf_file.filename.lower().endswith('.pdf'):
+        return jsonify({'erro': 'Formato de arquivo inválido. Envie um PDF.'}), 400
+    
+    # Extrai texto do PDF
+    extracted_text = extract_text_from_pdf(pdf_file)
+    if not extracted_text:
+        return jsonify({'erro': 'Falha ao extrair texto do PDF'}), 500
+    
+    # Envia para a LLM estruturar
+    structured_text = structure_document_text(extracted_text)
+    if not structured_text:
+        return jsonify({'erro': 'Falha ao processar texto com a LLM'}), 500
+    
+    return jsonify({
+        'texto_extraido': extracted_text,
+        'texto_estruturado': structured_text
+    }), 200
+
 
 def get_investment_info():
     """Busca informações de investimentos do usuário a partir do ID do usuário.
@@ -171,3 +241,37 @@ def enviar_mensagem():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)
+
+from services.pdf_extractor import extract_text_from_pdf
+
+@app.route('/extract', methods=['POST'])
+def extract_from_pdf():
+    try:
+        data = request.json
+        filepath = data.get("filepath")
+        if not filepath:
+            return jsonify({"erro": "Arquivo não especificado"}), 400
+
+        # 🗂️ Extrair texto do PDF
+        texto = extract_text_from_pdf(filepath)
+
+        # ✨ Prompt para LLM
+        prompt = f"""
+        Você receberá abaixo o conteúdo extraído de um documento PDF. Seu papel é identificar e estruturar as informações mais relevantes em formato JSON. Seja preciso e organizado.
+
+        Conteúdo do PDF:
+        \"\"\"
+        {texto}
+        \"\"\"
+
+        Retorne um JSON com as informações encontradas.
+        """
+
+        # 🤖 Chamar o modelo
+        chat = model.start_chat(history=[], enable_automatic_function_calling=False)
+        resposta = chat.send_message(prompt)
+
+        return jsonify({"resultado": resposta.text}), 200
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
