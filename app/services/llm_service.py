@@ -1,6 +1,24 @@
 from flask import Flask, request, jsonify
-import requests
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+import uuid
+
+load_dotenv()
+
+app = Flask(__name__)
+history = []
+
+# 🔐 Configurar chave
+genai.configure(api_key=os.getenv("LLM_API_KEY"))
+
+generation_config = {
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 40,
+    "max_output_tokens": 8192,
+    "response_mime_type": "text/plain",
+}
 
 def get_investment_info():
     """Busca informações de investimentos do usuário a partir do ID do usuário.
@@ -36,41 +54,16 @@ def get_doc_missing_by_user_id():
 # Processos de holding em aberto
 
 def transfer_to_human():
-    """
-    Args:
-    return: 
-        recado (string): recado de transferencia para um atendente humano
-    """
-    recado = "Deve transferir para um atendente humano"
-    numero_protocolo = "123456"
-    return recado, numero_protocolo
+    numero_protocolo = str(uuid.uuid4())[:8]  # algo tipo "a3f9c1e2"
+    recado = "Encaminharemos sua questão a um de nossos especialistas humanos."
+    resumo = "Resumo da conversa será construído pela LLM"
+    return {
+        "mensagem": recado,
+        "protocolo": numero_protocolo,
+        "resumo": resumo
+    }
 
-# def get_user_id_by_email():
-#     """Busca o ID do usuário a partir do email.
-#     Args:
-#         email: Email do usuário.
-#     Return:
-#         str: Retorna o ID do usuário.
-#     """
-#     try:
-#         response = requests.get(f"http://172.17.0.1:7296/api/Usuarios/email/{email}/id")
-#         return response.json()
-#     except:
-#         return "Não foi possível verificar o email no banco de dados :("
 
-# def get_user_details(email: str):
-#     """Busca informações do usuário a partir do email.
-#     Args:
-#         email: Email do usuário.
-#     Return:
-#         dict: Retorna informações como nome, email, telefone, idade, gênero apenas. Caso o usuário queira, ele pode solicitar informações sobre contas e investimentos posteriormente.
-#     """
-#     user_id = get_user_id_by_email(email)
-#     if user_id:
-#         response = requests.get(f"http://172.17.0.1:7296/api/Usuarios/{user_id}")
-#         return response.json()
-#     else:
-#         return "Não foi possível encontrar o usuário com o email fornecido."
 
 def get_products(produtos:str):
     """Informa o que a W1 oferece.
@@ -84,41 +77,82 @@ def get_products(produtos:str):
     return response_LLM.text
 
 
-tool = [transfer_to_human, get_products, get_investment_info, get_doc_missing_by_user_id]
+def comparar_estrategias_sucessorias(nome_bem: str, valor_estimado: float, tipo_bem: str) -> str:
+    itcmd_percentual = 0.08
+    custo_inventario = valor_estimado * itcmd_percentual
+    custo_holding = 50000.00
 
-genai.configure(api_key="AIzaSyCA8UFoADPrHVzFq26gFWtzqJ4IzyxfqRc")
+    texto = f"""
+🟥 Fora da W1:
+Bem: {nome_bem} ({tipo_bem})
+Valor total gasto com inventário:
+💸 R$ {custo_inventario:,.2f} (exemplo: {int(itcmd_percentual * 100)}% de ITCMD sobre R$ {valor_estimado:,.2f})
 
-generation_config = {
-    "temperature": 1,
-    "top_p": 0.95,
-    "top_k": 40,
-    "max_output_tokens": 8192,
-    "response_mime_type": "text/plain",
-}
+Tempo estimado:
+🕐 2 a 4 anos de inventário judicial
+
+Riscos:
+⚠️ Bloqueio de bens, brigas familiares, altos custos jurídicos
+
+🟩 Com W1 Holding Patrimonial:
+Custo da estruturação:
+💼 R$ {custo_holding:,.2f} (ex: honorários advocatícios + abertura de empresa)
+
+Tempo estimado:
+⏱️ 2 a 3 meses
+
+Vantagens:
+✅ Economia de impostos
+✅ Sucessão planejada
+✅ Proteção dos bens
+✅ Gestão profissional
+""".strip()
+    return texto
+
+
+tool = [transfer_to_human, get_products, get_investment_info, get_doc_missing_by_user_id, comparar_estrategias_sucessorias]
 
 model = genai.GenerativeModel(
-    'gemini-1.5-flash', 
+    'gemini-1.5-flash',
     generation_config=generation_config,
-    system_instruction="Seu nome é Agente Will e você é um assistente virtual de uma empresa de Consultoria Patrimonial. Suas tarefas é responder os clientes de forma mais amigavel possível para um público mais adulto e idoso. Você conseguir resolver questões sobre como abrir uma holding, serviços da W1, como encontrar os documentos para abrir holding como iptu e certificado de valor venal" 
-    
-    "A W1 Consultoria é uma empresa brasileira dedicada a fornecer orientação e planejamento financeiro personalizado. Nosso foco é ajudar você a alcançar suas metas financeiras por meio de estratégias cuidadosamente desenvolvidas, que consideram tanto sua situação atual quanto seus objetivos futuros."
+    system_instruction="""
+Você é W1ll, um assistente virtual da W1 Consultoria, uma empresa brasileira especializada em consultoria patrimonial. Sua missão é oferecer respostas claras, amigáveis e úteis para clientes adultos e idosos, de forma educada e profissional, mesmo diante de mensagens agressivas.
 
-    "Quando o usuário solicitar informações sobre investimentos, você deve informar os investimentos do usuário, chamando a função get_investment_info."
+# 🎯 Objetivos:
+- Caso o cliente mande apenas um oi, tudo bem ou algo do tipo:
+    - Apresente-se no início da conversa
+    - Explique brevemente o que pode fazer:
+        - Tirar dúvidas sobre a W1
+        - Informar sobre investimentos (chame: get_investment_info)
+        - Informar documentos faltantes para abertura de holding (chame: get_doc_missing_by_user_id)
+        - Informar os produtos oferecidos (chame: get_products)
+        - Transferir para um atendente humano se necessário (chame: transfer_to_human)
+- Caso o cliente faça uma pergunta direta, responda de forma clara e objetiva.
+- Caso o cliente faça uma pergunta complexa, divida a resposta em partes e explique cada uma delas.
+- Informar o número do protocolo e um resumo da conversa ao final de cada interação ou antes de transferir.
+- Quando o usuário desejar fazer uma comparação de estratégias sucessórias, também conhecida como simulação do processo da holding, pergunte o nome do bem, valor estimado e tipo de bem. Em seguida, chamar a função comparar_estrategias_sucessorias(nome_bem, valor_estimado, tipo_bem) e apresentar o resultado.
+- Se o usuário não fornecer informações suficientes, solicitar os dados necessários de forma educada.
 
-    "Quando o usuário solicitar informações sobre uma holding aberta, você deve informar os documentos faltantes pelo usuário, chamando a função get_uncontracted_products_by_user_id."
+# 🧭 Diretrizes:
+- Só responda a assuntos relacionados a: W1, holding, documentos de abertura (ex: IPTU, valor venal), produtos e serviços da empresa.
+- Se a pergunta for fora desse escopo, informe que será encaminhada a um atendente humano (chame: transfer_to_human).
+- Mantenha mensagens curtas e objetivas, exceto quando a explicação exigir.
+- Use uma linguagem acessível e calorosa.
 
-    "Quando um usuário solicitar informações sobre produtos, você deve informar todos os produtos oferecidos, por meio da função get_products."
+# 🧱 Valores da empresa:
+A W1 Consultoria busca orientar clientes de forma personalizada para alcançar suas metas financeiras com clareza, eficiência e empatia. Suas estratégias são desenvolvidas com base na situação atual e objetivos futuros do cliente.
 
-    "Caso não consiga resolver a questão do cliente, você deve transferir para um atendente humano chamando a função transfer_to_human. Como resposta para o usuário, além de informar que a questão será resolvida por um atendente humano, você deve informar o número do protocolo da conversa e um resumo da conversa até o momento",
-    tools=tool 
+# 🧰 Funções disponíveis:
+- get_investment_info(): retorna informações de investimentos do usuário.
+- get_doc_missing_by_user_id(): retorna documentos pendentes para abrir uma holding.
+- get_products(produtos: str): retorna os produtos oferecidos pela empresa.
+- transfer_to_human(): transfere para um atendente e gera número de protocolo.
+- comparar_estrategias_sucessorias(nome_bem: str, valor_estimado: float, tipo_bem: str): compara estratégias sucessórias.
+
+""",
+    tools=tool
 )
 
-# Buscar informações no bd
-# Encontrar documentos iptu
-
-
-app = Flask(__name__)
-history = []
 
 @app.route('/mensagem', methods=['POST'])
 def enviar_mensagem():
@@ -132,10 +166,8 @@ def enviar_mensagem():
         resposta_text = response.text
         history.append({"role":"user","parts":[mensagem]})
         history.append({"role":"model","parts":[resposta_text]})
-        return resposta_text, 200
-    else:
-        return jsonify({'erro': 'Mensagem não fornecida'}), 400
-
+        return jsonify({"resposta": resposta_text}), 200
+    return jsonify({'erro': 'Mensagem não fornecida'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0', port=5001)
