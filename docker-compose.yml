@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - llm
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  llm:
+    build:
+      context: .
+    command: python app/services/llm_service.py
+    ports:
+      - "5001:5001"
+    volumes:
+      - .:/app
